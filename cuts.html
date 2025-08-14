@@ -1,0 +1,140 @@
+﻿<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>My Haircuts ✌️</title>
+    <link rel="stylesheet" href="css/style.css" />
+    <style>
+        /* מינימום תוספות כדי להשיג מראה של ההדגמה */
+        .feed {
+            max-width: 960px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 16px
+        }
+
+        .post {
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            background: rgba(255,92,168,.06);
+            overflow: hidden
+        }
+
+        .head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 12px
+        }
+
+        .caption {
+            padding: 8px 12px;
+            color: var(--muted)
+        }
+        /* מסגרת רחבה – הווידאו/תמונה נכנסים שלמים */
+        .frame {
+            width: 100%;
+            aspect-ratio: 16/9; /* מסגרת רחבה */
+            background: #000; /* שחור כמו בתמונה ששלחת */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+            .frame > video, .frame > img {
+                width: 100%;
+                height: 100%;
+                object-fit: contain; /* רואים הכל, בלי חיתוך */
+                display: block;
+                background: #000;
+            }
+    </style>
+</head>
+<body>
+    <div class="shell">
+        <header class="nav">
+            <div class="brand">ALMOG ASAF • BARBERSHOP</div>
+            <nav class="tabs">
+                <a class="tab active" href="index.html">דף בית</a>
+                <a class="tab " href="book.html">קביעת תור</a>
+                <a class="tab " href="mine.html">התורים שלי</a>
+                <a class="tab active" href="cuts.html">My Haircuts ✌️</a>
+                <a class="tab " href="admin.html">מנהל</a>
+            </nav>
+        </header>
+
+        <main class="card section">
+            <h2 style="margin-top:0">My Haircuts ✌️</h2>
+            <div id="feed" class="feed"></div>
+        </main>
+
+        <footer>© Almog Asaf Barbershop</footer>
+    </div>
+
+    <script src="js/db.js"></script>
+    <script>
+        // בנוי על addPostMedia/getPosts/deletePost מ-js/db.js
+        const feed = document.getElementById('feed');
+
+        function fmt(ts) { return new Date(ts).toLocaleString('he-IL', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }); }
+
+        function cardHTML(p) {
+            const media = p.mediaType === 'video'
+                ? `<div class="frame"><video class="v" src="${p.src || p.dataURL}" muted playsinline loop preload="auto"></video></div>`
+                : `<div class="frame"><img src="${p.src || p.dataURL}" alt="haircut"/></div>`;
+            return `
+            <article class="post">
+              <div class="head">
+                <div><b>Almog Asaf Barbershop</b></div>
+                <div class="muted">${fmt(p.ts || Date.now())}</div>
+              </div>
+              ${media}
+              ${p.caption ? `<div class="caption">${p.caption}</div>` : ''}
+            </article>
+          `;
+        }
+
+        // ניגון אוטומטי בלי הפסקה כשנראה על המסך
+        function setupAutoPlay() {
+            const vids = Array.from(document.querySelectorAll('video.v'));
+            vids.forEach(v => {
+                v.muted = true;           // לנגן אוטומטי במובייל חובה Muted
+                v.loop = true;           // לולאה אינסופית
+                v.playsInline = true;
+                // ניסיון להתחיל מיד (יועיל בדסקטופ/אנדרואיד):
+                v.play().catch(() => { /* יופעל כשייכנס למסך */ });
+            });
+
+            // נגן\עצור רק כשהווידאו גלוי (חיסכון בסוללה)
+            const io = new IntersectionObserver(entries => {
+                entries.forEach(e => {
+                    const v = e.target;
+                    if (e.isIntersecting) {
+                        v.play().catch(() => { });
+                    } else {
+                        v.pause();
+                    }
+                });
+            }, { threshold: 0.25 }); // רבע מהוידאו גלוי
+
+            vids.forEach(v => io.observe(v));
+        }
+
+        function render() {
+            const posts = getPosts(); // מה-DB המקומי
+            if (!posts.length) { feed.innerHTML = '<div class="muted">אין פוסטים עדיין.</div>'; return; }
+            // אחרונים למעלה
+            feed.innerHTML = posts.map(cardHTML).join('');
+            setupAutoPlay();
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            render();
+            // אם המנהל מוסיף פוסט בטאב אחר – נרענן
+            window.addEventListener('storage', (ev) => { if (ev.key === DB_KEY) render(); });
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>My Haircuts ✌️</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="shell">
+    <header class="nav">
+      <div class="brand">ALMOG ASAF • BARBERSHOP</div>
+      <nav class="tabs">
+          <a class="tab" href="index.html">דף בית</a>
+          <a class="tab" href="book.html">קביעת תור</a>
+          <a class="tab active" href="mine.html">התורים שלי</a>
+          <a class="tab active" href="cuts.html">My Haircuts ✌️</a>
+          <a class="tab" href="admin.html">מנהל</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="card section">
+        <h2 style="margin-top:0">התורים שלי</h2>
+
+        <!-- הטופס שביקשת: שם פרטי + משפחה + טלפון (חובה) -->
+        <div class="form-grid">
+          <div>
+            <label>שם פרטי</label>
+            <input id="qFirst" required />
+          </div>
+          <div>
+            <label>שם משפחה</label>
+            <input id="qLast" required />
+          </div>
+          <div>
+            <label>טלפון</label>
+            <input id="qPhone" placeholder="05x-xxxxxxx" required />
+          </div>
+          <div style="display:flex;align-items:end">
+            <button id="findBtn" class="btn primary">חיפוש</button>
+          </div>
+        </div>
+
+        <div id="mineResults" class="list" style="margin-top:12px"></div>
+      </section>
+
+      <footer>© Almog Asaf Barbershop</footer>
+    </main>
+  </div>
+
+  <script src="js/db.js"></script>
+  <script>
+    // דורש שב-js/db.js תהיה הפונקציה removeAppointmentByIdentity(...) שהוספתי לך קודם
+    function initMine(){
+      const qFirst = document.getElementById('qFirst');
+      const qLast  = document.getElementById('qLast');
+      const qPhone = document.getElementById('qPhone');
+      const findBtn = document.getElementById('findBtn');
+      const mineResults = document.getElementById('mineResults');
+
+      function isFutureOrToday(dayKey){
+        const today = new Date(); today.setHours(0,0,0,0);
+        const d = new Date(dayKey+'T00:00');
+        return d.getTime() >= today.getTime();
+      }
+
+      function search(){
+        mineResults.innerHTML='';
+        if(!qFirst.value || !qLast.value || !qPhone.value){
+          alert('מלא/י שם פרטי, שם משפחה ומספר טלפון'); return;
+        }
+        const items = findAppointmentsByName(qFirst.value, qLast.value);
+        if(!items.length){
+          mineResults.innerHTML = `<div class="muted">לא נמצאו תורים על השם הזה.</div>`;
+          return;
+        }
+
+        items.sort((x,y)=>{
+          const dx = new Date(x.dayKey+'T00:00').getTime();
+          const dy = new Date(y.dayKey+'T00:00').getTime();
+          if(dx!==dy) return dx-dy;
+          return (x.t.h*60+x.t.m)-(y.t.h*60+y.t.m);
+        });
+
+        items.forEach(({dayKey,t,a,dur})=>{
+          const canCancel = isFutureOrToday(dayKey);
+          const row = document.createElement('div');
+          row.className='item';
+          row.innerHTML = `
+            <div>
+              <b>${dayKey}</b> · <b>${formatHM(t.h,t.m)}</b> · ${a.withScissors?'עם גזירות':'רגיל'}
+            </div>
+            ${canCancel ? `<button class="icon-btn danger" data-day="${dayKey}" data-slot="${a.baseSlot}">✖</button>` : `<span class="muted">עבר</span>`}
+          `;
+          mineResults.appendChild(row);
+        });
+
+        // ביטול תור בלחיצה על ✖ + אישור
+        mineResults.querySelectorAll('.icon-btn[data-day]').forEach(btn=>{
+          btn.addEventListener('click', ()=>{
+            const dayKey = btn.getAttribute('data-day');
+            const baseSlot = Number(btn.getAttribute('data-slot'));
+            const timeLabel = btn.parentElement.querySelector('b:nth-of-type(2)')?.textContent || '';
+            if(confirm(`לבטל את התור של ${timeLabel} בתאריך ${dayKey}?`)){
+              const ok = removeAppointmentByIdentity(dayKey, baseSlot, qFirst.value, qLast.value, qPhone.value);
+              if(ok){ alert('התור בוטל.'); search(); }
+              else { alert('לא נמצאה התאמה לשם/טלפון עבור התור הזה.'); }
+            }
+          });
+        });
+      }
+
+      findBtn.addEventListener('click', search);
+    }
+    document.addEventListener('DOMContentLoaded', initMine);
+  </script>
+</body>
+</html>

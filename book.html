@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>קביעת תור</title>
+    <link rel="stylesheet" href="css/style.css" />
+    <style>
+        .pill {
+            padding: 8px 12px;
+            border-radius: 999px;
+            border: 1px solid var(--border);
+            background: rgba(255,92,168,.08);
+            color: #fff;
+            cursor: pointer;
+            margin: 4px;
+        }
+
+            .pill.booked {
+                opacity: .45;
+                cursor: not-allowed;
+            }
+
+            .pill.selected {
+                box-shadow: 0 0 0 3px rgba(255,92,168,.35);
+            }
+
+        .rowline {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .muted {
+            opacity: .8
+        }
+
+        .item {
+            padding: 10px;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            margin: 6px 0;
+            background: rgba(255,92,168,.06);
+        }
+    </style>
+</head>
+<body>
+    <div class="shell">
+        <header class="nav">
+            <div class="brand">ALMOG ASAF • BARBERSHOP</div>
+            <nav class="tabs">
+                <a class="tab" href="index.html">דף בית</a>
+                <a class="tab active" href="book.html">קביעת תור</a>
+                <a class="tab" href="mine.html">התורים שלי</a>
+                <a class="tab active" href="cuts.html">My Haircuts ✌️</a>
+                <a class="tab" href="admin.html">מנהל</a>
+            </nav>
+        </header>
+
+        <main>
+            <section class="card section">
+                <h2 style="margin-top:0">קביעת תור</h2>
+
+                <div class="form-grid">
+                    <div>
+                        <label>תאריך</label>
+                        <input type="date" id="datePicker" />
+                    </div>
+
+                    <div>
+                        <label>בחר/י שעה</label>
+                        <div id="slots" class="rowline"></div>
+                        <small class="muted">מוצגות רק שעות שהמנהל הפעיל ליום זה. אם אין שעות — נסה/י יום אחר.</small>
+                    </div>
+
+                    <div>
+                        <label>אפשרויות</label>
+                        <div class="rowline">
+                            <label style="display:flex;align-items:center;gap:8px">
+                                <input id="withScissors" type="checkbox" />
+                                עם "גזירות" (+10 דק' לכל מי שאחריך)
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <hr style="border:none;border-top:1px solid var(--border);margin:16px 0" />
+
+                <div class="form-grid">
+                    <div>
+                        <label>שם פרטי</label>
+                        <input id="firstName" placeholder="למשל: איתי" required />
+                    </div>
+                    <div>
+                        <label>שם משפחה</label>
+                        <input id="lastName" placeholder="למשל: כהן" required />
+                    </div>
+                    <div>
+                        <label>טלפון</label>
+                        <input id="phone" placeholder="05x-xxxxxxx" required />
+                    </div>
+                </div>
+
+                <div class="actions" style="margin-top:14px;gap:8px">
+                    <button class="btn primary" id="saveBtn">שמור תור</button>
+                    <a class="btn ghost" href="index.html">ביטול</a>
+                </div>
+
+                <div id="afterSave" class="list" style="margin-top:12px;display:none"></div>
+            </section>
+
+            <section class="card calendar">
+                <h3 style="margin-top:0">לוח היום</h3>
+                <div id="todayList" class="list"></div>
+            </section>
+
+            <footer>© Almog Asaf Barbershop</footer>
+        </main>
+    </div>
+
+    <script src="js/db.js"></script>
+    <script>
+        // מוצא את היום הראשון (עד 90 יום קדימה) שיש לו לפחות סלוט אחד מותר
+        function findNextBookableDate(fromDate) {
+            for (let i = 0; i < 90; i++) {
+                const d = new Date(fromDate.getFullYear(), fromDate.getMonth(), fromDate.getDate() + i);
+                const key = d.toISOString().slice(0, 10);
+                if (getAllowedSlots(key).length > 0) return key;
+            }
+            return fromDate.toISOString().slice(0, 10);
+        }
+
+        function initBook() {
+            const datePicker = document.getElementById('datePicker');
+            const slotsEl = document.getElementById('slots');
+            const withScissors = document.getElementById('withScissors');
+            const saveBtn = document.getElementById('saveBtn');
+            const todayList = document.getElementById('todayList');
+            const firstName = document.getElementById('firstName');
+            const lastName = document.getElementById('lastName');
+            const phone = document.getElementById('phone');
+            const afterSave = document.getElementById('afterSave');
+
+            // קבע ברירת מחדל: היום הבא שיש לו סלוטים פעילים
+            const today = new Date();
+            datePicker.value = findNextBookableDate(today);
+
+            let selectedSlot = null;
+
+            function labelBaseHM(slot) {
+                const t = slotToHM(slot);
+                return `${String(t.h).padStart(2, '0')}:${String(t.m).padStart(2, '0')}`;
+            }
+
+            function renderSlots() {
+                const dayKey = datePicker.value;
+                const allowed = getAllowedSlots(dayKey).sort((a, b) => a - b);
+                const list = getDayList(dayKey);
+
+                slotsEl.innerHTML = '';
+                selectedSlot = null;
+
+                if (!allowed.length) {
+                    const msg = document.createElement('div');
+                    msg.className = 'muted';
+                    msg.textContent = 'אין שעות זמינות ליום זה.';
+                    slotsEl.appendChild(msg);
+                } else {
+                    allowed.forEach(slot => {
+                        const taken = list.some(a => a.baseSlot === slot);
+                        const pill = document.createElement('button');
+                        pill.className = 'pill' + (taken ? ' booked' : '');
+                        pill.textContent = labelBaseHM(slot) + (taken ? ' (תפוס)' : '');
+                        pill.disabled = taken;
+                        pill.addEventListener('click', () => {
+                            selectedSlot = slot;
+                            document.querySelectorAll('.pill').forEach(x => x.classList.remove('selected'));
+                            pill.classList.add('selected');
+                        });
+                        slotsEl.appendChild(pill);
+                    });
+                }
+
+                // רשימת התורים (מציגה "שעת אמת" עם ההיסט של גזירות)
+                todayList.innerHTML = '';
+                list.slice().sort((a, b) => sortByActual(a, b, list)).forEach(a => {
+                    const t = calcActualTime(a, list);
+                    const dur = a.withScissors ? 40 : 30;
+                    const div = document.createElement('div');
+                    div.className = 'item';
+                    div.innerHTML = `
+                <div><b>${String(t.h).padStart(2, '0')}:${String(t.m).padStart(2, '0')}</b>
+                · ${a.firstName} ${a.lastName}
+                <span class="muted">(${a.withScissors ? 'עם גזירות' : 'רגיל'})</span></div>
+                <div class="muted">${dur} דק'</div>`;
+                    todayList.appendChild(div);
+                });
+            }
+
+            function save() {
+                const dayKey = datePicker.value;
+                if (selectedSlot == null) return alert('בחר/י שעה');
+                if (!firstName.value || !lastName.value || !phone.value) return alert('יש למלא שם פרטי, שם משפחה ומספר טלפון');
+
+                // בדיקת הטבת מצטיין לחודש
+                const d = new Date(dayKey + 'T12:00');
+                const y = d.getFullYear(), m = d.getMonth() + 1;
+                const perk = getMonthlyTopPerk(y, m);
+                const isPerk = perk &&
+                    perk.firstName.toLowerCase() === firstName.value.trim().toLowerCase() &&
+                    perk.lastName.toLowerCase() === lastName.value.trim().toLowerCase() &&
+                    (perk.phone || '').trim() === phone.value.trim();
+                const price = isPerk ? 30 : 40;
+
+                try {
+                    addAppointment(dayKey, selectedSlot, {
+                        firstName: firstName.value.trim(),
+                        lastName: lastName.value.trim(),
+                        phone: phone.value.trim(),
+                        withScissors: !!withScissors.checked
+                    });
+                    // רענון מסכים
+                    renderSlots();
+
+                    // “הוסף לי ל‑Google Calendar”
+                    afterSave.style.display = 'block';
+                    afterSave.innerHTML = '';
+                    const list = getDayList(dayKey);
+                    const appt = list.find(a => a.baseSlot === selectedSlot);
+                    const t = calcActualTime(appt, list);
+                    const startHM = `${String(t.h).padStart(2, '0')}:${String(t.m).padStart(2, '0')}`;
+                    const dur = appt.withScissors ? 40 : 30;
+                    const gUrl = buildGCalLink({
+                        title: 'תספורת — Almog Asaf',
+                        dayKey, startHM, durationMin: dur,
+                        details: `שם: ${appt.firstName} ${appt.lastName} | טלפון: ${appt.phone} | מחיר: ${price} ₪`,
+                        location: 'Almog Asaf Barbershop'
+                    });
+                    const row = document.createElement('div');
+                    row.className = 'item';
+                    row.innerHTML = `<div>התור נשמר בהצלחה!${isPerk ? ' (מחיר למצטיין: 30 ₪)' : ''}</div><a class="btn" href="${gUrl}" target="_blank" rel="noopener">הוסף לי ל‑Google Calendar</a>`;
+                    afterSave.appendChild(row);
+                } catch (e) { alert(e.message); }
+            }
+
+            // רנדר ראשוני + על שינויי תאריך
+            datePicker.addEventListener('change', renderSlots);
+            saveBtn.addEventListener('click', save);
+            renderSlots();
+
+            // **סנכרון חי עם דף המנהל** — כשיש שינוי ב-localStorage (למשל, המנהל הפעיל/כיבה שעות)
+            window.addEventListener('storage', (ev) => {
+                try {
+                    if (ev.key === DB_KEY) { // מוגדר ב-js/db.js
+                        // אם השינוי קשור ליום הנבחר — נרנדר שוב
+                        renderSlots();
+                    }
+                } catch (e) { }
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', initBook);
+    </script>
+</body>
+</html>
